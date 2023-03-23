@@ -4,6 +4,8 @@ using UnityEngine;
 
 public class ObjectClicker : MonoBehaviour
 {
+// This requires two GameObject, one tagged with a "Stimulus" and the other tagged as "Background" on the Inspector settings of the game object
+
     // Initializing Serialized Vars
     private int NumTap;
     private int missCount;
