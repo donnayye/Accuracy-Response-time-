@@ -4,7 +4,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.SceneManagement;
 
-
+// Attach this Script onto an Empty Scene Object
 
 public class Prompt : MonoBehaviour
 {
