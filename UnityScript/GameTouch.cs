@@ -9,13 +9,15 @@ using UnityEngine.SceneManagement;
 // Make sure to have the Script file name the same as "GameTouch" or vice versa
 public class GameTouch : MonoBehaviour
 {
+    // Initialize Audio Stimulus & Gameplay theme song
+
+
     // Serialized Vars
     [SerializeField]
     private Text gameText;
 
     [SerializeField]
-    private GameObject StimulusCanvas, PromptCanvas, RewardCanvas;
-
+    public GameObject StimulusCanvas, PromptCanvas, RewardCanvas, PauseCanvas;
 
     [SerializeField]
     public float reactionTime, holdTimer, liftTime, startTime, randomDelayBeforeMeasuring, timeOverall, StimulusAppear, timer, miss_Reaction, touchTime;
@@ -23,16 +25,13 @@ public class GameTouch : MonoBehaviour
     [SerializeField]
     private float[] TimeDuration = { 3.0f, 5.0f, 7.0f };
 
-    //Help provide game logic
-    private bool clockIsTicking, timerCanBeStopped;
-
     // Provide Boolean Logic for Button
     [SerializeField]
     private bool HoldTimeComplete;
 
     // Provide boolean logic for Stimulus / Prompt 
     [SerializeField]
-    private bool StimulusCall, PromptCall, RewardCall;
+    public bool StimulusCall, PromptCall, RewardCall, PauseCall;
 
     [SerializeField]
     public int NumOfTaps, missTap, hitTap;
@@ -54,15 +53,14 @@ public class GameTouch : MonoBehaviour
         gameText.text = "Hold Down Buttons to Start";
 
 
-        // Boolean 
-        clockIsTicking = false;
-        timerCanBeStopped = true;
+        
         HoldTimeComplete = false;
 
         // Canvas
         RewardCall = false;
         StimulusCall = false;
-        StimulusCanvas.SetActive(false);
+        PauseCall= false;
+        StimulusCanvas.SetActive(false); PauseCanvas.SetActive(false);
         PromptCall = true;
         PromptCanvas.SetActive(true);
     }
@@ -98,7 +96,6 @@ public class GameTouch : MonoBehaviour
                 {
                     Debug.Log("Waiting for Stimulus to appear...");
                 }
-
 
             }
         }
@@ -153,6 +150,12 @@ public class GameTouch : MonoBehaviour
                 missTap++;
                 Debug.Log("Too early buddy");
             }
+        }
+        if (Input.GetKeyDown("escape"))
+        {
+            // Pausing the Game
+            PauseToggle();
+
         }
 
 
@@ -236,7 +239,31 @@ public class GameTouch : MonoBehaviour
     {
         gameText.text = "Hold Down buttons again!";
     }
+
+    public void PauseToggle()
+    {
+        // Same applies for Audio
+        if (!PauseCall)     // False
+        {
+            PauseCall= !PauseCall;
+            PauseCanvas.SetActive(PauseCall);
+
+            Time.timeScale = 0f; //Time is paused
+        }
+        else
+        {
+            Time.timeScale = 1f;
+            PauseCall= !PauseCall;
+            PauseCanvas.SetActive(PauseCall);
+
+            //AudioListener.pause = true;
+        }
+        
+
+        
+    }
 }
+
 
 
 
