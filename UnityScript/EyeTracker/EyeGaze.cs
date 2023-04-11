@@ -43,6 +43,7 @@ public class EyeGaze:MonoBehaviour
                 Debug.Log("Hit " + _hit.collider.name + ", " + gazePoint.Screen.x + ", " + gazePoint.Screen.y);
             }
             
+             _lastGazePoint=gazePoint;       // Saves gaze point to compare timestamp
         }
     }
 }
