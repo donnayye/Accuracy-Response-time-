@@ -311,7 +311,10 @@ public class GameTouch : MonoBehaviour
 
             //AudioListener.pause = true;
         }
-
+    public void QuitToggle(){
+        // Quit application and save 
+        WriteCSV();
+        Debug.Log("Quitting now...");
 
 
     }
