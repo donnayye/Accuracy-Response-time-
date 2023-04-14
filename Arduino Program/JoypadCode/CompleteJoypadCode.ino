@@ -40,7 +40,14 @@ void loop() {
   // Read force sensor values
   forceSensor1Value = analogRead(A0);
   forceSensor2Value = analogRead(A1);
-
+  
+  // Example: Insert condition statements for analog values of force sensor 
+  // if ((LeftForceSen >= some value && RightForceSen >= some Val) && LeftPad != true || RightPad != true)
+  // { // Secondary input 
+        send data to Unity boolean value successfully held
+  
+  
+  //}
   // Send button and force sensor data to Unity
   unitySerial.print(buttonState1);
   unitySerial.print(",");
