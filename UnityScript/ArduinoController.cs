@@ -18,6 +18,9 @@ public class ArduinoController : MonoBehaviour
     private float buttonHoldDuration = 0.5f; // Adjust this value to set the desired button hold duration in seconds
     private float leftButtonTimer = 0f;
     private float rightButtonTimer = 0f;
+    private float leftButtonTotalHoldTime = 0f;
+    private float rightButtonTotalHoldTime = 0f;
+
 
     void Start()
     {
@@ -45,7 +48,7 @@ public class ArduinoController : MonoBehaviour
             try
             {
                 string data = serialPort.ReadLine();
-                Debug.Log("Received from Arduino: " + data);
+                //Debug.Log("Received from Arduino: " + data);
 
                 // Parse the received data
                 string[] values = data.Split(',');
@@ -76,19 +79,22 @@ public class ArduinoController : MonoBehaviour
         {
             if (!leftButtonHeld)
             {
-                Debug.Log("Left button initial press detected.");
-                leftButtonHeld = true;
                 leftButtonTimer = Time.time;
+                Debug.Log("Left button initial press detected at " + leftButtonTimer.ToString("F2") + " seconds");
+                leftButtonHeld = true;
+
             }
             else if (Time.time - leftButtonTimer >= buttonHoldDuration)
             {
-                Debug.Log("Left button hold detected.");
+
             }
         }
         else if (buttonState1 == 0 && leftButtonHeld)
         {
-            Debug.Log("Left button release detected.");
+            Debug.Log("Left button release detected. Total hold time: " + (Time.time - leftButtonTimer).ToString("F2") + " seconds");
+            leftButtonTotalHoldTime += Time.time - leftButtonTimer;
             leftButtonHeld = false;
+            leftButtonTimer = 0f;
         }
 
         // Detect right button actions
@@ -96,19 +102,21 @@ public class ArduinoController : MonoBehaviour
         {
             if (!rightButtonHeld)
             {
-                Debug.Log("Right button initial press detected.");
-                rightButtonHeld = true;
                 rightButtonTimer = Time.time;
+                Debug.Log("Right button initial press detected at " + rightButtonTimer.ToString("F2") + " seconds");
+                rightButtonHeld = true;
             }
             else if (Time.time - rightButtonTimer >= buttonHoldDuration)
             {
-                Debug.Log("Right button hold detected.");
+
             }
         }
         else if (buttonState2 == 0 && rightButtonHeld)
         {
-            Debug.Log("Right button release detected.");
+            Debug.Log("Right button release detected. Total hold time: " + (Time.time - rightButtonTimer).ToString("F2") + " seconds");
+            rightButtonTotalHoldTime += Time.time - rightButtonTimer;
             rightButtonHeld = false;
+            rightButtonTimer = 0f;
         }
     }
 }
