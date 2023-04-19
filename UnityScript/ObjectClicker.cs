@@ -80,8 +80,18 @@ public class GameTouch : MonoBehaviour
     }
     void Update()
     {
+    /// <summary>
+    /// 1. Figure out which is more effective: Placing the if-else condition for the Force Sensor Range in Unity Script or Arduino IDE 
+    /// 2. The Force sensor should be the first to detect the intial tap of "press/holding" the joypad 
+    /// For example:
+    ///     Hold down both buttons
+    /// if (Input.GetKeyDown(" ")) <--- customize phrase for recieving input from arduino 
+    ///     if ( (L_Joypad == True && R_Joypad == True) || (L_Sen == True && R_Sen == True))
+    ///             startTime = Time.time;
+    ///             
+    ///</summary>
         
-        if (Input.GetKeyDown("space"))
+        if (Input.GetKeyDown("space"))              // Initialize 
         {
             startTime = Time.time;      //Beginning of Time also tap
             Debug.Log("Press time is: " + startTime);
