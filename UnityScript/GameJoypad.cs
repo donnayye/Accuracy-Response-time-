@@ -142,7 +142,7 @@ public class GameJoypad : MonoBehaviour
                 }
             }
         }
-        else if (((buttonState1 == 0 || buttonState2 == 0) && ButtonHeld) && (ThresholdRelease <= forceSensor1Value && forceSensor1Value <= ThresholdPress))
+        else if (((buttonState1 == 0 || buttonState2 == 0) && ButtonHeld) && (ThresholdRelease <= forceSensor1Value && forceSensor1Value <= ThresholdPress)) //release
         {
             liftTime = Time.time;   // Time lifted = overall time - start of tap (Reaction Time)
             StopCoroutine("StartMeasuring");
