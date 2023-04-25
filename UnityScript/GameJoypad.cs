@@ -103,7 +103,7 @@ public class GameJoypad : MonoBehaviour
     }
     void UpdateSensor(int buttonState1,int buttonState2, int forceSensor1Value,int forceSensor2Value)
     {
-        if ((buttonState1 == 1 || buttonState2 == 1) && (forceSensor1Value >= ThresholdPress && forceSensor1Value >= ThresholdPress))
+        if ((buttonState1 == 1 && buttonState2 == 1) && (forceSensor1Value >= ThresholdPress && forceSensor1Value >= ThresholdPress))
         {
             if (!ButtonHeld && (forceSensor1Value >= ThresholdPress && forceSensor1Value >= ThresholdPress)) // press
             {
@@ -142,7 +142,7 @@ public class GameJoypad : MonoBehaviour
                 }
             }
         }
-        else if (((buttonState1 == 0 || buttonState2 == 0) && ButtonHeld) && (ThresholdRelease <= forceSensor1Value && forceSensor1Value <= ThresholdPress)) //release
+        else if (((buttonState1 == 0 && buttonState2 == 0) && ButtonHeld) && (ThresholdRelease <= forceSensor1Value && forceSensor1Value <= ThresholdPress)) //release
         {
             liftTime = Time.time;   // Time lifted = overall time - start of tap (Reaction Time)
             StopCoroutine("StartMeasuring");
