@@ -18,7 +18,7 @@ public class GameJoypad : MonoBehaviour
     private bool ButtonHeld = false;
     private float ThresholdPress = 750;
     private float ThresholdRelease = 100;
-    private float buttonHoldDuration = 0.01f; // Adjust this value to set the desired button hold duration in seconds
+    private float buttonHoldDuration = 1; // Adjust this value to set the desired button hold duration in seconds
     private float ButtonTimer = 0f;
 
     // Initialize Audio Stimulus & Gameplay theme song
