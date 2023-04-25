@@ -6,6 +6,7 @@ using UnityEngine.SceneManagement;
 using System.IO.Ports;
 using Tobii.Gaming;
 
+// Include the Boolean Value into the conditions
 public class GameJoypad001 : MonoBehaviour
 {
     // Joypad Initialization
@@ -113,6 +114,7 @@ public class GameJoypad001 : MonoBehaviour
     }
     void UpdateSensor(int buttonState1, int buttonState2, int forceSensor1Value, int forceSensor2Value)
     {
+            // Condition for holding both button and force sensor
         if ((buttonState1 == 1 && buttonState2 == 1) && (forceSensor1Value >= ThresholdPress && forceSensor1Value >= ThresholdPress))
         {
             if (!ButtonHeld && (forceSensor1Value >= ThresholdPress && forceSensor1Value >= ThresholdPress)) // press
