@@ -7,16 +7,39 @@ using Tobii.Gaming;
 using Mono.Data.Sqlite;
 using System.IO;
 using System.Data;
+using System.IO.Ports;
+//
 
 
 public class ObjectHit : MonoBehaviour
 {
-    // Initialize Audio Stimulus & Gameplay theme song
+    // Joypad Initialization
+    public string portName = "COM3"; // Change this to the name of the serial port connected to Arduino
+    public int baudRate = 9600; // Should match the baud rate defined in Arduino code
+
+    private SerialPort serialPort;
+ 
+    private float ThresholdPress = 750;
+    private float ThresholdRelease = 100;
+    //
+    
+
+    // Boolean for joypad
+    public int buttonState1, buttonState2;
+    public int Lefty, Righty;
+    public float forceSensor1, forceSensor2, forceSensor1Value, forceSensor2Value;
+    public List<bool> LeftHandLift, RightHandLift;
+    public bool initialState = false;
+
+    // Timing variables for joypad
+    
+    public bool LeftHandRel, RightHandRel;
+
+    // Ray cast hit for cam and eye tracker
     private RaycastHit2D _hit;
     private RaycastHit2D hit;
-    // Joypad Initialization
-    public string portName = "COM4"; // Change this to the name of the serial port connected to Arduino
-    public int baudRate = 9600; // Should match the baud rate defined in Arduino code
+    
+
     // max range of Screen Resolution
     public float Pos_x, Pos_y;
 
@@ -33,11 +56,12 @@ public class ObjectHit : MonoBehaviour
     public bool releasedVal;
     public int wrongHand;
     public Vector2 previousGaze;
-    public Vector2 Nullify = new Vector2(0,0);
+    public Vector2 Nullify = new Vector2(0, 0);
     public List<Vector2> StimPosition;          // Store the Stimulus Position 
-    private float ThresholdPress = 750;      //Force Sensor Threshold
-    private float ThresholdRelease = 100;
+    public Vector2 _lastGazePosition;
+    private float _lastGazeUpdateTime;
 
+ 
 
     // Latency 
     public float _latency;
@@ -48,7 +72,7 @@ public class ObjectHit : MonoBehaviour
     // eye tracker sampling rate
     public float lastgazeTimestamp = 0f;
     private float _gazeUpdateInterval = 0.03f;  // update every 50ms
-    
+
     // Data that will be exported into Excel
     [SerializeField] public float totalTime;                                    // Used if Student does not complete the total amount of time
     [SerializeField] public List<int> numTaps;
@@ -60,8 +84,11 @@ public class ObjectHit : MonoBehaviour
     [SerializeField] public List<float> visualGaze_time;
     [SerializeField] public List<float> tapTimestamps;
     [SerializeField] public List<float> appStimulus;
-    [SerializeField] public List<Vector2> tapCoord; 
+    [SerializeField] public List<Vector2> tapCoord;
     [SerializeField] public float timeStamp_Tap;
+
+    // Include data variables for L/R hand lifts 
+
 
     // Serialized Var
     [SerializeField]
@@ -70,6 +97,8 @@ public class ObjectHit : MonoBehaviour
     [SerializeField]
     public GameObject StimulusCanvas, PromptCanvas, RewardCanvas, PauseCanvas, StimulusObj;
 
+    // Used for Visual gaze referencing
+    private Collider2D _lastHitCollider;
 
     // Provide Boolean Logic for Button
     [SerializeField]
@@ -79,86 +108,276 @@ public class ObjectHit : MonoBehaviour
     [SerializeField]
     public bool StimulusCall, PromptCall, RewardCall, PauseCall;
 
-    public bool ObjectDetect;
+    private bool ObjectDetect;
+
+    //File relation
+    string path = System.Environment.GetFolderPath(System.Environment.SpecialFolder.Desktop) + "/Data Samples/Database";
+    string path2 = System.Environment.GetFolderPath(System.Environment.SpecialFolder.Desktop) + "/Data Samples/Spreadsheet";
+
     int fileIndex = 0;
     string databaseName = "myDatabase.db";
-    
+
     void Start()
     {
+        if (!Directory.Exists(path))
+        {
+            Directory.CreateDirectory(path);
+        }
+        // Joypad initialization
+        serialPort = new SerialPort(portName, baudRate);
+        serialPort.Open();
+        serialPort.ReadTimeout = 100;
+
         // Initializing the screen resolution from Start
         Screen.SetResolution(1920, 1080, true);
         updateT = 0;
         wrongHand = 0;
         firstGazeTime = 0f;
         StartGame();                            // Starting the game
-        // Initialize the serial port
-        serialPort = new SerialPort(portName, baudRate);
-        serialPort.Open();
-        serialPort.ReadTimeout = 100;
-        // Start reading data from Arduino in a separate thread
-        StartCoroutine(ReadDataFromArduino());
-        HoldTimeComplete = false;
 
         // Random Time generator
         randomDelayBeforeMeasuring = 0f;
-        ObjectDetect= false;                    // Boolean for Visual gaze detection
+        ObjectDetect = false;                    // Boolean for Visual gaze detection
         Debug.Log("The application data path is " + Application.dataPath);
 
-        
+        if (!TobiiAPI.IsConnected)
+        {
+            Debug.LogWarning("Tobii eye tracker is not connected.");
+        }
         Invoke("EndGame", TimeDuration[2]);
 
     }
-    void OnDestroy()
-    {
-        if (serialPort != null && serialPort.IsOpen)
-        {
-            serialPort.Close();
-        }
-    }
-    void Update(int buttonState1, int buttonState2, int forceSensor1Value, int forceSensor2Value)
+    void Update()
     {
         // Time Elapsed (Overall)
         timeElapsed = Time.time;
 
-        // Obtaining Gaze Point every frame 
-        GazePoint gazePoint = TobiiAPI.GetGazePoint();
-        if (gazePoint.IsRecent() && gazePoint.IsValid)      // Use IsValid to detect object  & IsRecent for recent visual points 
+
+        // Placing the input and eye gaze here for hieracy execution
+        if (Time.time - _lastGazeUpdateTime >= _gazeUpdateInterval)
         {
-            // First Gaze
-            firstGazeTime = Time.time;
-            gazeTimestamp = gazePoint.Timestamp;
-            
-            if (gazeTimestamp - lastgazeTimestamp >= _gazeUpdateInterval)
+
+            GazePoint gazePoint = TobiiAPI.GetGazePoint();
+            if (gazePoint.IsRecent() && gazePoint.IsValid)      // Use IsValid to detect object  & IsRecent for recent visual points 
             {
-                
+                // First Gaze
+                firstGazeTime = Time.time;
+                // gazeTimestamp = gazePoint.Timestamp;
+
                 Vector2 gazePosition = gazePoint.Screen;
-               // lastgazeTimestamp = gazeTimestamp;
-
-                _hit = Physics2D.Raycast(gazePosition, Vector2.zero);
-
-                if (_hit.collider != null && _hit.collider.CompareTag("Stimulus"))
+                if (Vector2.Distance(gazePosition, _lastGazePosition) > 0.01f)
                 {
-                    Debug.Log("Calling second");
-                    if (ObjectDetect)
-                    {
-                        _lastGazeTime = firstGazeTime;          /// Updates every time it hits if it doesnt
+                    _hit = Physics2D.Raycast(gazePosition, Vector2.zero);
 
-                    }
-                    else
+                    if (_hit.collider != null && _hit.collider.CompareTag("Stimulus"))
                     {
-                        // Store Recognition Time
-                        recogTime = firstGazeTime - StimulusAppear;
-                        visualCoord.Add(gazePosition);
-                        visualGaze_time.Add(recogTime);             // Storing the Recognition time (Object detection) 
-                        ObjectDetect = true;
+                        if (ObjectDetect)
+                        {
+                            _lastGazeTime = firstGazeTime;          /// Updates every time it hits if it doesnt
+
+                        }
+                        else
+                        {
+                            // Store Recognition Time
+                            recogTime = firstGazeTime - StimulusAppear;
+                            visualCoord.Add(gazePosition);
+                            visualGaze_time.Add(recogTime);             // Storing the Recognition time (Object detection) 
+                            ObjectDetect = true;
+                        }
                     }
 
                 }
-                lastgazeTimestamp = gazeTimestamp;
+                _lastGazePosition = gazePosition;
             }
+            _lastGazeUpdateTime = Time.time;
+        }
+
+        if (Input.GetMouseButtonDown(0))
+        {
+            // Get Visual Gaze of where user gazes at when clicking
+            GazePoint gazePointer = TobiiAPI.GetGazePoint();
+            if (gazePointer.IsValid && gazePointer.IsRecent())
+            {
+                Debug.Log("Im called here");
+
+                previousGaze = gazePointer.Screen;
+                if (!ObjectDetect)
+                {
+                    visualCoord.Add(previousGaze);
+                    visualGaze_time.Add(0);
+                }
+
+            }
+            // initialization
+            Vector2 mouseTapper = Input.mousePosition;
+
+            // Collect first tap & timestamp
+            TouchTime = Time.time;
+            overallTaps++;
+
+            //sql
+            tapTimestamps.Add(TouchTime);
+            numTaps.Add(overallTaps);
+
+            // Response Time
+            float timeStamp_Tap = Time.time - StimulusAppear;
+
+
+            hit = Physics2D.Raycast(Camera.main.ScreenToWorldPoint(Input.mousePosition), Vector2.zero);
+            if (hit.transform.tag == "Stimulus")
+            {
+                objHit++;
+                // Tap count w/ timestamp & response time
+                tapCoord.Add(mouseTapper);
+                responseTime.Add(timeStamp_Tap);
+                hitTap.Add(objHit);
+                missTap.Add(0);
+
+                // Hand input
+                HandCalc();
+
+                // Switch Reward Canvas
+                StartCoroutine("RewardSystem");
+            }
+            else if (hit.transform.tag == "Background")
+            {
+                objMiss++;
+
+                // Tap count w/ timestamp & response time
+                tapCoord.Add(mouseTapper);
+                responseTime.Add(timeStamp_Tap);
+                missTap.Add(objMiss);
+
+                // Hand input
+                HandCalc();
+
+                // Nulling list datas
+                hitTap.Add(0);
+                appStimulus.Add(0);
+                StimPosition.Add(Nullify);
+
+            }
+            else if (hit.collider.tag == "Prompt")       // If Student hits !Stimulus Canvas count as abrupted tap
+            {
+                responseTime.Add(timeStamp_Tap);
+                tapCoord.Add(mouseTapper);
+                objMiss++;
+                missTap.Add(objMiss);
+
+                // Hand input
+                HandCalc();
+                // nulling 
+                hitTap.Add(0);
+                appStimulus.Add(0);
+                StimPosition.Add(Nullify);
+            }
+            else
+            {
+                // Hits anything else 
+                responseTime.Add(timeStamp_Tap);
+                tapCoord.Add(mouseTapper);
+                objMiss++;
+                missTap.Add(objMiss);
+                // Hand input
+                HandCalc();
+
+                appStimulus.Add(0);
+                hitTap.Add(0);
+                StimPosition.Add(Nullify);
+            }
+        }
+
+        // Joypad input placement 
+        string data = serialPort.ReadLine();
+        // Parse the received data
+        string[] values = data.Split(',');
+
+        int buttonState1 = int.Parse(values[0]);        // left
+        int buttonState2 = int.Parse(values[1]);        // right
+        int forceSensor1Value = int.Parse(values[2]);   // Left
+        int forceSensor2Value = int.Parse(values[3]);   // Right
+
+        if ((forceSensor1Value >= ThresholdPress && forceSensor1Value >= ThresholdPress) || (buttonState1 == 1 && buttonState2 == 1))   // Recognizes pressure first
+        {
+            if(buttonState1 == 1 && buttonState2 == 1)          // Recognizes press and hold
+            {
+                // Keeps the startTime when first tapped subtracting with Overall time
+                holdTimer = Time.time - startTime;
+                RightHandRel = false; LeftHandRel = false;
+
+                if (holdTimer > timer && !HoldTimeComplete)
+                {
+                    // If held isnt complete but Stimulus Canvas not appeared
+                    Debug.Log("calling routine");
+                    StartCoroutine("StartMeasuring");
+                }
+                else if (holdTimer > timer && HoldTimeComplete)
+                {
+                    // Registering as HoldTimeComplete
+                    if (StimulusCall)
+                    {
+                        StopCoroutine("StartMeasuring");
+                    }
+                }
+            }
+            else if(buttonState1 == 0 && buttonState2 == 0)
+            {
+                startTime = Time.time;
+            }
+        }
+        if ((forceSensor1Value < ThresholdRelease || forceSensor2Value < ThresholdRelease) &&(buttonState1 == 0 || buttonState2 == 0))       // Release
+        {
+            // Time lifted = overall time - start of tap (Reaction Time)
+            StopCoroutine("StartMeasuring");
+
+            if (StimulusCall)
+            {
+                if (buttonState1 == 1 && buttonState2 == 0)
+                {
+                    if (!initialState)
+                    {
+                        liftTime = Time.time;
+                        recogTime = liftTime - StimulusAppear;
+                        releaseTime.Add(recogTime);
+                        initialState = true;
+                    }
+                    RightHandRel = true; LeftHandRel = false;
+
+                }
+                else if(buttonState1 == 0 && buttonState2 == 1)
+                {
+                    if (!initialState)
+                    {
+                        liftTime = Time.time;
+                        recogTime = liftTime - StimulusAppear;
+                        releaseTime.Add(recogTime);
+                        initialState = true;
+                    }
+                    // Left hand
+                    RightHandRel = false; LeftHandRel = true;
+                    
+                }
+                else  // Both hand release
+                {
+                    if (!initialState)
+                    {
+                        liftTime = Time.time;
+                        recogTime = liftTime - StimulusAppear;
+                        releaseTime.Add(recogTime);
+                        initialState = true;
+                    }
+                    RightHandRel = true; LeftHandRel = true;
+                  
+                }
+
+            }
+            //initialState = false;
+            HoldTimeComplete = false;
+            
 
         }
-        // Placing the input and eye gaze here for hieracy execution
+
+
 
 
         if (Input.GetKeyDown("space"))
@@ -208,133 +427,7 @@ public class ObjectHit : MonoBehaviour
             }
         }
 
-        if ((buttonState1 == 0 && buttonState2 == 0) && (forceSensor1Value >= ThresholdPress && forceSensor1Value >= ThresholdPress))
-        {
-            //Beginning of Time also tap
-            startTime = Time.time;
-            Debug.Log("Press time is: " + startTime);
-            forceSensor1 = forceSensor1Value;
-            forceSensor2 = forceSensor2Value;
-
-        }
-        if ((buttonState1 == 1 && buttonState2 == 1) && (forceSensor1Value >= ThresholdPress && forceSensor1Value >= ThresholdPress))
-        {
-            // Keeps the startTime when first tapped subtracting with Overall time
-            holdTimer = Time.time - startTime;
-
-            if (holdTimer > timer && !HoldTimeComplete)
-            {
-                // If held isnt complete but Stimulus Canvas not appeared
-                Debug.Log("calling routine");
-                StartCoroutine("StartMeasuring");
-            }
-            else if (holdTimer > timer && HoldTimeComplete)
-            {
-                // Registering as HoldTimeComplete
-                if (StimulusCall)
-                {
-                    StopCoroutine("StartMeasuring");
-                }
-
-            }
-        }
-        if ((buttonState1 == 0 && buttonState2 == 0) && (forceSensor1Value <= ThresholdPress && forceSensor1Value <= ThresholdPress))   
-        {
-            liftTime = Time.time;                        // Time lifted = overall time - start of tap (Reaction Time)
-            StopCoroutine("StartMeasuring");
-            if (StimulusCall)
-            {
-                releasedVal = true;
-                recogTime = liftTime - StimulusAppear;
-                releaseTime.Add(recogTime);
-
-            }
-            else if (!StimulusCall)
-            {
-                releasedVal = false;
-                textChange("Please try again and place hands on buttons");
-                HoldTimeComplete = false;
-            }
-        }
-
-        // RECONSTRUCTIION
-        if (Input.GetMouseButtonDown(0) && gazePoint.IsRecent())
-        {
-
-            // initialization
-            Vector2 mouseTapper = Input.mousePosition;
-
-            // Collect first tap & timestamp
-            TouchTime = Time.time;
-            overallTaps++;
-
-            //sql
-            tapTimestamps.Add(TouchTime);         
-            numTaps.Add(overallTaps);
-
-            // Response Time
-            float timeStamp_Tap = Time.time - StimulusAppear;
-            if (!ObjectDetect)
-            {
-               
-                visualCoord.Add(previousGaze);                    // Storing since Object isnt detected to see where his gaze is at
-                visualGaze_time.Add(0);
-            }
-            
-            hit = Physics2D.Raycast(Camera.main.ScreenToWorldPoint(Input.mousePosition), Vector2.zero);
-            if (hit.transform.tag == "Stimulus")
-            {
-                objHit++;
-                // Tap count w/ timestamp & response time
-                tapCoord.Add(mouseTapper);
-                responseTime.Add(timeStamp_Tap);
-                hitTap.Add(objHit);
-                missTap.Add(0);
-                
-                // Switch Reward Canvas
-                StartCoroutine("RewardSystem");
-            }
-            else if (hit.transform.tag == "Background")
-            {
-                objMiss++;
-
-                // Tap count w/ timestamp & response time
-                tapCoord.Add(mouseTapper);
-                responseTime.Add(timeStamp_Tap);
-                missTap.Add(objMiss);
-
-                // Nulling list datas
-                hitTap.Add(0);
-                appStimulus.Add(0);
-                StimPosition.Add(Nullify);
-
-            }
-            else if(hit.collider.tag == "Prompt")       // If Student hits !Stimulus Canvas count as abrupted tap
-            {
-                responseTime.Add(timeStamp_Tap);
-                tapCoord.Add(mouseTapper);
-                objMiss++;
-                missTap.Add(objMiss);
-
-                // nulling 
-                hitTap.Add(0);
-                appStimulus.Add(0);
-                StimPosition.Add(Nullify);
-            }
-            else
-            {
-                // Hits anything else 
-                responseTime.Add(timeStamp_Tap);
-                tapCoord.Add(mouseTapper);
-                objMiss++;
-                missTap.Add(objMiss);
-
-                appStimulus.Add(0);
-                hitTap.Add(0);
-                StimPosition.Add(Nullify);
-            }
-        }
-        
+                                
         if (Input.GetKeyDown("escape"))
         {
             // Quit game instead
@@ -350,34 +443,40 @@ public class ObjectHit : MonoBehaviour
         }
         _lastTime = timeElapsed;        // used for calculating latency
     }
-    IEnumerator ReadDataFromArduino()
+
+    void HandCalc()
     {
-        while (true)
+        if (!RightHandRel && LeftHandRel)
         {
-            try
-            {
-                string data = serialPort.ReadLine();
-                //Debug.Log("Received from Arduino: " + data);
+            // Lefty
+            LeftHandLift.Add(LeftHandRel);
+            RightHandLift.Add(RightHandRel);
+            Lefty++;
+        }
+        else if (RightHandRel && !LeftHandRel)
+        {
+            // Storing
+            Righty++;
+            LeftHandLift.Add(LeftHandRel);
+            RightHandLift.Add(RightHandRel);
 
-                // Parse the received data
-                string[] values = data.Split(',');
-                if (values.Length >= 4)
-                {
-                    int buttonState1 = int.Parse(values[0]);
-                    int buttonState2 = int.Parse(values[1]);
-                    int forceSensor1Value = int.Parse(values[2]);
-                    int forceSensor2Value = int.Parse(values[3]);
+        }
+        else if(RightHandRel && LeftHandRel)
+        {
+            // both
+            LeftHandLift.Add(LeftHandRel);
+            RightHandLift.Add(RightHandRel);
+            Righty++;
+            Lefty++;
 
-                    // Detect button actions
-                    Update(buttonState1, buttonState2, forceSensor1Value, forceSensor2Value);
-                }
-            }
-            catch (System.TimeoutException)
-            {
-                // Ignore timeout exceptions
-            }
-
-            yield return null;
+        }
+    }
+   
+    void OnDestroy()
+    {
+        if (serialPort != null && serialPort.IsOpen)
+        {
+            serialPort.Close();
         }
     }
     IEnumerator StartMeasuring()
@@ -403,7 +502,7 @@ public class ObjectHit : MonoBehaviour
     {
         // Reset Hold methods
         HoldTimeComplete = false;
-        releasedVal = false;
+        initialState = false;
 
         StimulusCall = false;
         StimulusCanvas.SetActive(false);
@@ -528,25 +627,27 @@ public class ObjectHit : MonoBehaviour
         Debug.Log("Game is ending...");
         
         ExportData();
+        Application.Quit();
     }
 
     public void ExportData()           // export at the end of the gameplay 
     {
         Debug.Log("Exporting Data");
         // Check if the database file already exists
-        while (File.Exists(Application.dataPath + "/" + databaseName))
+
+        while (File.Exists(path + "/" + databaseName))
         {
             fileIndex++;
             databaseName = "myDatabase" + fileIndex.ToString() + ".db";
         }
 
         // Set the connection string
-        connectionString = "URI=file:" + Application.dataPath + "/" + databaseName;
+        connectionString = "URI=file:" + path + "/" + databaseName;
         var connection = new SqliteConnection(connectionString);
         connection.Open();
 
         // Create a new table to store the data
-        var createTableQuery = "CREATE TABLE IF NOT EXISTS TapData (NumTaps INTEGER PRIMARY KEY, ResponseTime REAL, ReleaseTime REAL, MissTap REAL, HitTap INTEGER, VisualCoord BLOB, VisualGazeTime REAL, TapTimestamps REAL, StimulusAppearance REAL, StimulusCoordinate BLOB)";
+        var createTableQuery = "CREATE TABLE IF NOT EXISTS TapData (TapTimestamps REAL PRIMARY KEY, TapNumber INTEGER, TapCoordinate BLOB, HitTap INTEGER, MissTap INTEGER, StimulusAppearance REAL, StimulusCoordinate BLOB, VisualGazeTime REAL, VisualCoord BLOB, ResponseTime REAL, ReleaseTime REAL, LeftHandLift INTEGER, RightHandLift INTEGER)";
         var createTableCommand = new SqliteCommand(createTableQuery, connection);
 
         createTableCommand.ExecuteNonQuery();
@@ -555,9 +656,9 @@ public class ObjectHit : MonoBehaviour
         // Taps per min, Accuracy Rate, Average response Time, Average correct hand
         for (int i = 0; i < tapTimestamps.Count; i++)
         {
-            var insertQuery = "INSERT INTO TapData (NumTaps, ResponseTime, ReleaseTime, MissTap, HitTap, VisualCoord, VisualGazeTime, TapTimestamps, StimulusAppearance, StimulusCoordinate) VALUES (@NumTaps, @ResponseTime, @ReleaseTime, @MissTap, @HitTap, @VisualCoord, @VisualGazeTime, @TapTimestamps, @StimulusAppearance, @StimulusCoordinate )";
+            var insertQuery = "INSERT INTO TapData (TapTimestamps, TapNumber, TapCoordinate, HitTap, MissTap, StimulusAppearance, StimulusCoordinate, VisualGazeTime, VisualCoord, ResponseTime, ReleaseTime, LeftHandLift, RightHandLift) VALUES (@TapTimestamps, @TapNumber, @TapCoordinate, @HitTap, @MissTap, @StimulusAppearance, @StimulusCoordinate, @VisualGazeTime, @VisualCoord, @ResponseTime, @ReleaseTime, @LeftHandLift, @RightHandLift )";
             var insertCommand = new SqliteCommand(insertQuery, connection);
-            insertCommand.Parameters.AddWithValue("@NumTaps", numTaps[i]);
+            insertCommand.Parameters.AddWithValue("@TapNumber", numTaps[i]);
             if (i < responseTime.Count)
             {
                 insertCommand.Parameters.AddWithValue("@ResponseTime", responseTime[i]);
@@ -625,6 +726,33 @@ public class ObjectHit : MonoBehaviour
             else
             {
                 insertCommand.Parameters.AddWithValue("@StimulusCoordinate", null);
+
+            }
+            if(i < LeftHandLift.Count)
+            {
+                insertCommand.Parameters.AddWithValue("@LeftHandLift", LeftHandLift[i]);
+            }
+            else
+            {
+                insertCommand.Parameters.AddWithValue("@LeftHandLift", null);
+
+            }
+            if(i < RightHandLift.Count)
+            {
+                insertCommand.Parameters.AddWithValue("@RightHandLift", RightHandLift[i]);
+            }
+            else
+            {
+                insertCommand.Parameters.AddWithValue("@RightHandLift", null);
+
+            }
+            if (i < tapCoord.Count)
+            {
+                insertCommand.Parameters.AddWithValue("@TapCoordinate", tapCoord[i]);
+            }
+            else
+            {
+                insertCommand.Parameters.AddWithValue("@TapCoordinate", null);
 
             }
             insertCommand.ExecuteNonQuery();
